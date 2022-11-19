@@ -1,2 +1,3 @@
+pub mod auth;
 pub mod bot;
-pub mod config;
+pub mod oauth2_callback;

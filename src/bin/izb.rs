@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
+use ikkizous_bot::auth;
 use ikkizous_bot::bot::Bot;
-use ikkizous_bot::config::RedactedString;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -18,7 +18,7 @@ struct Args {
     out_dir: PathBuf,
 
     /// Only do a sample of work.
-    #[arg(long, default_value="false")]
+    #[arg(long, default_value = "false")]
     sample: bool,
 }
 
@@ -27,12 +27,16 @@ async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     let args = Args::parse();
 
-    let twitter_bearer_token = RedactedString::new(
-        std::env::var("TWITTER_BEARER_TOKEN").expect("TWITTER_BEARER_TOKEN unset"),
-    );
-    let mut bot = Bot::new(twitter_bearer_token);
-
-    let image_refs = bot.fetch_liked_image_refs(&args.username, args.sample).await?;
+    let oauth2_client = auth::load_client();
+    let (url, state, verifier) = auth::login_start(&oauth2_client).await?;
+    println!("To login, please visit: {}", url);
+    let params = ikkizous_bot::oauth2_callback::catch_callback().await;
+    assert_eq!(state.secret(), params.state.secret());
+    let access_token = auth::login_end(&oauth2_client, params.code, verifier).await?;
+    let mut bot = Bot::new(access_token);
+    let image_refs = bot
+        .fetch_liked_image_refs(&args.username, args.sample)
+        .await?;
 
     let client = reqwest::Client::new();
     for image_ref in image_refs.into_iter() {
