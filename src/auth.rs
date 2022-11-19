@@ -3,8 +3,9 @@ use twitter_v2::oauth2::{AuthorizationCode, CsrfToken, PkceCodeChallenge, PkceCo
 use twitter_v2::Result;
 
 pub fn load_client(port: u16) -> Oauth2Client {
-    Oauth2Client::new_public(
+    Oauth2Client::new(
         std::env::var("TWITTER_OAUTH_CLIENT_ID").expect("could not find CLIENT_ID"),
+        std::env::var("TWITTER_OAUTH_CLIENT_SECRET").expect("could not find CLIENT_SECRET"),
         format!("http://localhost:{port}/oauth2/callback")
             .parse()
             .expect("callback url"),

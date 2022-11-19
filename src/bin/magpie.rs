@@ -26,9 +26,6 @@ struct Args {
 async fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     log::debug!("Initialised logging");
-
-    log::debug!("Loading dotenv file if present");
-    dotenv::dotenv().ok();
     let args = Args::parse();
 
     log::info!("Logging into Twitter with OAuth");
@@ -66,6 +63,7 @@ async fn main() -> Result<()> {
     progress.finish_and_clear();
 
     log::info!("Downloading {} images", image_refs.len());
+    std::fs::create_dir_all(&args.out_dir)?;
     let client = reqwest::Client::new();
     let progress = indicatif::ProgressBar::new(image_refs.len().try_into().expect("usize in u64") );
     for image_ref in image_refs.into_iter() {
