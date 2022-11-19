@@ -9,10 +9,6 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Username of the likes to download
-    #[arg(long)]
-    username: String,
-
     /// Output directory to store files in.
     #[arg(long)]
     out_dir: PathBuf,
@@ -24,6 +20,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    pretty_env_logger::init();
     dotenv::dotenv().ok();
     let args = Args::parse();
 
@@ -35,13 +32,13 @@ async fn main() -> Result<()> {
     let access_token = auth::login_end(&oauth2_client, params.code, verifier).await?;
     let mut bot = Bot::new(access_token);
     let image_refs = bot
-        .fetch_liked_image_refs(&args.username, args.sample)
+        .fetch_liked_image_refs(args.sample)
         .await?;
 
     let client = reqwest::Client::new();
     for image_ref in image_refs.into_iter() {
         let mut path = args.out_dir.clone();
-        path.push(image_ref.filename);
+        path.push(image_ref.filename());
         let mut file = File::create(&path)?;
         let bytes = &client.get(image_ref.url).send().await?.bytes().await?;
         file.write_all(bytes)?;

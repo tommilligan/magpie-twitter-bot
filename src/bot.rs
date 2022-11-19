@@ -24,7 +24,7 @@ pub struct TweetRef {
 #[derive(Debug, Clone)]
 pub struct ImageRef {
     pub tweet: TweetRef,
-    pub filename: String,
+    pub internal_filename: String,
     pub url: url::Url,
 }
 
@@ -40,7 +40,7 @@ impl ImageRef {
             created_at,
             self.tweet.username,
             self.tweet.id.to_string(),
-            self.filename
+            self.internal_filename
         )
     }
 }
@@ -56,12 +56,11 @@ impl Bot {
 
     pub async fn fetch_liked_image_refs(
         &mut self,
-        username: &str,
         sample: bool,
     ) -> Result<Vec<ImageRef>> {
         let user = self
             .api
-            .get_user_by_username(username)
+            .get_users_me()
             .send()
             .await?
             .into_data()
@@ -164,7 +163,7 @@ impl Bot {
                                 .expect("no path segments");
                             image_refs.push(ImageRef {
                                 tweet: tweet_ref.clone(),
-                                filename: filename.to_owned(),
+                                internal_filename: filename.to_owned(),
                                 url: url.clone(),
                             })
                         }
@@ -173,28 +172,28 @@ impl Bot {
             }
 
             // Extract image from url in tweet
-            if let Some(entities) = tweet.entities {
-                if let Some(urls) = entities.urls {
-                    for url in urls.into_iter() {
-                        if let Some(mut images) = url.images {
-                            images.sort_by_key(|image| -(image.height as isize));
-                            if let Some(image) = images.into_iter().next() {
-                                let mut extension = std::borrow::Cow::Borrowed("jpg");
-                                for (key, value) in image.url.query_pairs() {
-                                    if key == "format" {
-                                        extension = value;
-                                    }
-                                }
-                                image_refs.push(ImageRef {
-                                    tweet: tweet_ref.clone(),
-                                    filename: format!("url-link.{extension}"),
-                                    url: image.url,
-                                })
-                            };
-                        }
-                    }
-                }
-            };
+            // if let Some(entities) = tweet.entities {
+            //     if let Some(urls) = entities.urls {
+            //         for url in urls.into_iter() {
+            //             if let Some(mut images) = url.images {
+            //                 images.sort_by_key(|image| -(image.height as isize));
+            //                 if let Some(image) = images.into_iter().next() {
+            //                     let mut extension = std::borrow::Cow::Borrowed("jpg");
+            //                     for (key, value) in image.url.query_pairs() {
+            //                         if key == "format" {
+            //                             extension = value;
+            //                         }
+            //                     }
+            //                     image_refs.push(ImageRef {
+            //                         tweet: tweet_ref.clone(),
+            //                         internal_filename: format!("url-link.{extension}"),
+            //                         url: image.url,
+            //                     })
+            //                 };
+            //             }
+            //         }
+            //     }
+            // };
         }
 
         Ok(image_refs)
