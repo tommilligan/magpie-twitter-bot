@@ -3,6 +3,16 @@ name = "ikkizous-bot"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+anyhow = "1.0.66"
+clap = { version = "4.0.26", features = ["derive"] }
+dotenv = "0.15.0"
+reqwest = { version = "0.11.13", default_features = false, features = ["rustls-tls"] }
+thiserror = "1.0.37"
+time = { version = "0.3.17", features = ["formatting"] }
+tokio = { version = "1.22.0", features = ["macros"] }
+twitter-v2 = { version = "0.1.8", default_features = false, features = ["oauth2", "rustls-tls"] }
+url = "2.3.1"
+
+[dev-dependencies]
+pretty_assertions = "1"
