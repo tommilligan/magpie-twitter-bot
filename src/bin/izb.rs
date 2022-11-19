@@ -37,21 +37,41 @@ async fn main() -> Result<()> {
     let access_token = auth::login_end(&oauth2_client, params.code, verifier).await?;
 
     let mut bot = Bot::new(access_token);
+    log::info!("Fetching image metadata");
+    let progress = indicatif::ProgressBar::new_spinner();
+    progress.set_style(
+        indicatif::ProgressStyle::with_template("{spinner:.blue} {msg}")
+            .expect("invalid progress template")
+            // For more spinners check out the cli-spinners project:
+            // https://github.com/sindresorhus/cli-spinners/blob/master/spinners.json
+            .tick_strings(&[
+                "▹▹▹▹▹",
+                "▸▹▹▹▹",
+                "▹▸▹▹▹",
+                "▹▹▸▹▹",
+                "▹▹▹▸▹",
+                "▹▹▹▹▸",
+                "▪▪▪▪▪",
+            ]),
+    );
+    progress.set_message("Fetching...");
+    progress.enable_steady_tick(std::time::Duration::from_millis(120));
     let image_refs = bot
         .fetch_liked_image_refs(args.sample)
         .await?;
-    let image_refs_len = image_refs.len();
+    std::thread::sleep(std::time::Duration::from_secs(7));
+    progress.finish_and_clear();
 
-    log::info!("Downloading {image_refs_len} images");
+    log::info!("Downloading {} images", image_refs.len());
     let client = reqwest::Client::new();
-    // FIXME can used a fixed length download bar here
-    for (image_index, image_ref) in image_refs.into_iter().enumerate() {
-        log::debug!("Downloading image ({}/{})", image_index + 1, image_refs_len);
+    let progress = indicatif::ProgressBar::new(image_refs.len().try_into().expect("usize in u64") );
+    for image_ref in image_refs.into_iter() {
         let mut path = args.out_dir.clone();
         path.push(image_ref.filename());
         let mut file = File::create(&path)?;
         let bytes = &client.get(image_ref.url).send().await?.bytes().await?;
         file.write_all(bytes)?;
+        progress.inc(1);
     }
 
     Ok(())

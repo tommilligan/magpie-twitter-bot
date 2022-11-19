@@ -58,7 +58,6 @@ impl Bot {
         &mut self,
         sample: bool,
     ) -> Result<Vec<ImageRef>> {
-        log::info!("Fetching liked image metadata");
         let user = self
             .api
             .get_users_me()
