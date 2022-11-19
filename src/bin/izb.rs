@@ -63,7 +63,6 @@ async fn main() -> Result<()> {
     let image_refs = bot
         .fetch_liked_image_refs(args.sample)
         .await?;
-    std::thread::sleep(std::time::Duration::from_secs(7));
     progress.finish_and_clear();
 
     log::info!("Downloading {} images", image_refs.len());
