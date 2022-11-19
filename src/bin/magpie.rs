@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use magpie_twitter_bot::auth;
 use magpie_twitter_bot::bot::Bot;
+use magpie_twitter_bot::oauth2_callback;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -33,7 +34,7 @@ async fn main() -> Result<()> {
     let (url, state, verifier) = auth::login_start(&oauth2_client).await?;
     open::that(url.to_string())?;
     log::debug!("Waiting for callback...");
-    let params = magpie_twitter_bot::oauth2_callback::catch_callback(args.port).await;
+    let params = oauth2_callback::catch_callback(args.port).await.map_err(|error| anyhow!("OAuth2 callback received an error response: {}", error))?;
     assert_eq!(state.secret(), params.state.secret());
     let access_token = auth::login_end(&oauth2_client, params.code, verifier).await?;
 
@@ -57,15 +58,13 @@ async fn main() -> Result<()> {
     );
     progress.set_message("Fetching...");
     progress.enable_steady_tick(std::time::Duration::from_millis(120));
-    let image_refs = bot
-        .fetch_liked_image_refs(args.sample)
-        .await?;
+    let image_refs = bot.fetch_liked_image_refs(args.sample).await?;
     progress.finish_and_clear();
 
     log::info!("Downloading {} images", image_refs.len());
     std::fs::create_dir_all(&args.out_dir)?;
     let client = reqwest::Client::new();
-    let progress = indicatif::ProgressBar::new(image_refs.len().try_into().expect("usize in u64") );
+    let progress = indicatif::ProgressBar::new(image_refs.len().try_into().expect("usize in u64"));
     for image_ref in image_refs.into_iter() {
         let mut path = args.out_dir.clone();
         path.push(image_ref.filename());

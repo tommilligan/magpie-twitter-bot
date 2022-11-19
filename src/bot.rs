@@ -54,10 +54,7 @@ impl Bot {
         }
     }
 
-    pub async fn fetch_liked_image_refs(
-        &mut self,
-        sample: bool,
-    ) -> Result<Vec<ImageRef>> {
+    pub async fn fetch_liked_image_refs(&mut self, sample: bool) -> Result<Vec<ImageRef>> {
         let user = self
             .api
             .get_users_me()

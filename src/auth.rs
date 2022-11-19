@@ -18,7 +18,10 @@ pub async fn login_start(client: &Oauth2Client) -> Result<(url::Url, CsrfToken, 
 
     let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
     // create authorization url
-    let (url, state) = client.auth_url(challenge, [Scope::TweetRead, Scope::UsersRead, Scope::LikeRead ]);
+    let (url, state) = client.auth_url(
+        challenge,
+        [Scope::TweetRead, Scope::UsersRead, Scope::LikeRead],
+    );
     // redirect user
     Ok((url, state, verifier))
 }

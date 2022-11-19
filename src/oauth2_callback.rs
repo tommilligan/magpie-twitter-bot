@@ -1,13 +1,16 @@
-use axum::{extract::Query, routing::get, Router, response::Html};
+use axum::{extract::RawQuery, response::Html, routing::get, Router};
+use std::borrow::Cow;
+use oauth2::{
+    basic::BasicErrorResponse, AuthorizationCode, CsrfToken
+};
 use serde::Deserialize;
 use std::net::SocketAddr;
 use std::sync::Mutex;
 use tokio::sync::oneshot::{channel, Sender};
-use oauth2::{AuthorizationCode, CsrfToken};
 
 struct State {
     pub shutdown: Option<Sender<()>>,
-    pub params: Option<CallbackParams>,
+    pub params: Option<CodeGrantResult>,
 }
 
 static STATE: Mutex<State> = Mutex::new(State {
@@ -15,15 +18,85 @@ static STATE: Mutex<State> = Mutex::new(State {
     params: None,
 });
 
-// TODO handle errors like http://localhost:49277/oauth2/callback?error=access_denied&state=9B2gPFsDYTUWSE_IsFvrbw
+struct Headings<'a> {
+    title: &'a str,
+    subheader: Cow<'a, str>,
+}
+
+impl Headings<'static> {
+    pub fn new(title: &'static str, subheader: &'static str) -> Headings<'static> {
+        Headings {title, subheader: Cow::Borrowed(subheader)}
+    }
+}
+
+trait ToHeadings {
+    fn to_headings(&self) -> Headings<'_>;
+}
+
 #[derive(Deserialize)]
-pub struct CallbackParams {
+pub struct CodeGrantResponse {
     pub code: AuthorizationCode,
     pub state: CsrfToken,
 }
 
+impl ToHeadings for CodeGrantResponse {
+    fn to_headings(&self) -> Headings{
+        Headings{
+            title: "You are now logged in.",
+            subheader: Cow::Borrowed("Please close the window."),
+        }
+    }
+}
+
+impl ToHeadings for BasicErrorResponse {
+    fn to_headings(&self) -> Headings{
+        let error = self.error().as_ref();
+        let subheader = match (self.error_description(), self.error_uri()) {
+            (None, None) => Cow::Borrowed(error),
+            (Some(description), None) => Cow::Owned(format!("{error}: {description}")),
+            (None, Some(uri)) => Cow::Owned(format!("{error} ({uri})")),
+            (Some(description), Some(uri)) => Cow::Owned(format!("{error}: {description} ({uri})")),
+        };
+        Headings{
+            title: "Login failed.",
+            subheader,
+        }
+    }
+}
+
+/// Private implementation of `Result` so we can implement deserialize as an untagged enum.
+///
+/// Once we've deserialized, translate to `Result` and use that.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum CodeGrantResultCustom {
+    Ok(CodeGrantResponse),
+    Err(BasicErrorResponse),
+}
+
+pub type CodeGrantResult = Result<CodeGrantResponse, BasicErrorResponse>;
+
+impl Into<CodeGrantResult> for CodeGrantResultCustom {
+    fn into(self) -> Result<CodeGrantResponse, BasicErrorResponse> {
+        match self {
+            CodeGrantResultCustom::Ok(response) => Ok(response),
+            CodeGrantResultCustom::Err(response) => Err(response),
+        }
+    }
+}
+
+impl<T, E> ToHeadings for Result<T, E> where T: ToHeadings, E: ToHeadings {
+    fn to_headings(&self) -> Headings{
+        match self {
+            Ok(response) => response.to_headings(),
+            Err(response) => response.to_headings(),
+        }
+    }
+}
+
+
 // TODO pull this out to a generic catcher for any serde struct
-pub async fn catch_callback(port: u16) -> CallbackParams {
+pub async fn catch_callback(port: u16) -> CodeGrantResult {
     log::debug!("Setting initial state");
     let (tx, rx) = channel::<()>();
     {
@@ -50,7 +123,7 @@ pub async fn catch_callback(port: u16) -> CallbackParams {
         .unwrap();
 
     let mut state = STATE.lock().expect("could not lock mutex");
-    state.params.take().expect("params set")
+    state.params.take().expect("params set").into()
 }
 
 async fn root() -> &'static str {
@@ -61,14 +134,25 @@ async fn health() -> &'static str {
     "ok"
 }
 
-async fn oauth2_callback(Query(callback_params): Query<CallbackParams>) -> Html<&'static str> {
-    let mut state = STATE.lock().expect("could not lock mutex");
-    state.params = Some(callback_params);
-    log::debug!("shutting down");
-    if let Some(shutdown) = state.shutdown.take() {
-        shutdown.send(()).expect("failed to send shutdown");
-    }
-    Html(r#"<html>
+fn login_failed_headings() -> Headings<'static> {
+    Headings::new("Login failed.", "Received invalid OAuth2 response.")
+}
+
+async fn oauth2_callback(RawQuery(query): RawQuery) -> Html<String> {
+    let params = if let Some(query) = query {
+        let params: CodeGrantResultCustom = serde_urlencoded::from_str(&query).unwrap();
+        let params: CodeGrantResult = params.into();
+        Some(params)
+    } else {
+        None
+    };
+    let headings = if let Some(ref params) = params {
+        params.to_headings()
+    } else {
+        login_failed_headings()
+    };
+
+    let html = format!(r#"<html>
     <body>
         <div style="
             width: 100%;
@@ -77,9 +161,16 @@ async fn oauth2_callback(Query(callback_params): Query<CallbackParams>) -> Html<
             text-align: center;
             font-family: sans-serif;
         ">
-            <h1>You are now logged in.</h1>
-            <h2>Please close the window.</h2>
+            <h1>{}</h1>
+            <h2>{}</h2>
         </div>
     </body>
-</html>"#)
+</html>"#, headings.title, headings.subheader);
+    let mut state = STATE.lock().expect("could not lock mutex");
+    state.params = params;
+    log::debug!("shutting down");
+    if let Some(shutdown) = state.shutdown.take() {
+        shutdown.send(()).expect("failed to send shutdown");
+    }
+    Html(html)
 }
