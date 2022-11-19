@@ -58,6 +58,7 @@ impl Bot {
         &mut self,
         sample: bool,
     ) -> Result<Vec<ImageRef>> {
+        log::info!("Fetching liked image metadata");
         let user = self
             .api
             .get_users_me()
@@ -65,6 +66,7 @@ impl Bot {
             .await?
             .into_data()
             .expect("username to exist");
+        log::debug!("Fetching page 1");
         let mut next_page = Some(
             self.api
                 .get_user_liked_tweets(user.id)
@@ -82,6 +84,8 @@ impl Bot {
                 .await?,
         );
 
+        // FIXME use a progress bar or something here
+        let mut page_count = 2;
         let mut image_refs = Vec::new();
         while let Some(page) = next_page {
             image_refs.extend(self.process_page(&page).await?);
@@ -89,7 +93,9 @@ impl Bot {
                 return Ok(image_refs);
             }
 
+            log::debug!("Fetching page {page_count}");
             next_page = page.next_page().await?;
+            page_count = page_count + 1;
         }
 
         Ok(image_refs)

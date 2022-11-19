@@ -20,23 +20,33 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    pretty_env_logger::init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    log::debug!("Initialised logging");
+
+    log::debug!("Loading dotenv file if present");
     dotenv::dotenv().ok();
     let args = Args::parse();
 
+    log::info!("Logging into Twitter with OAuth");
     let oauth2_client = auth::load_client();
     let (url, state, verifier) = auth::login_start(&oauth2_client).await?;
-    println!("To login, please visit: {}", url);
+    open::that(url.to_string())?;
+    log::debug!("Waiting for callback...");
     let params = ikkizous_bot::oauth2_callback::catch_callback().await;
     assert_eq!(state.secret(), params.state.secret());
     let access_token = auth::login_end(&oauth2_client, params.code, verifier).await?;
+
     let mut bot = Bot::new(access_token);
     let image_refs = bot
         .fetch_liked_image_refs(args.sample)
         .await?;
+    let image_refs_len = image_refs.len();
 
+    log::info!("Downloading {image_refs_len} images");
     let client = reqwest::Client::new();
-    for image_ref in image_refs.into_iter() {
+    // FIXME can used a fixed length download bar here
+    for (image_index, image_ref) in image_refs.into_iter().enumerate() {
+        log::debug!("Downloading image ({}/{})", image_index + 1, image_refs_len);
         let mut path = args.out_dir.clone();
         path.push(image_ref.filename());
         let mut file = File::create(&path)?;
