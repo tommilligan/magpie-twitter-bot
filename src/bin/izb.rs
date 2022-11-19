@@ -17,9 +17,9 @@ struct Args {
     #[arg(long)]
     out_dir: PathBuf,
 
-    /// Limit saved images to given size.
-    #[arg(long)]
-    limit: usize,
+    /// Only do a sample of work.
+    #[arg(long, default_value="false")]
+    sample: bool,
 }
 
 #[tokio::main]
@@ -30,9 +30,9 @@ async fn main() -> Result<()> {
     let twitter_bearer_token = RedactedString::new(
         std::env::var("TWITTER_BEARER_TOKEN").expect("TWITTER_BEARER_TOKEN unset"),
     );
-    let bot = Bot::new(twitter_bearer_token);
+    let mut bot = Bot::new(twitter_bearer_token);
 
-    let image_refs = bot.fetch_liked_image_refs(&args.username, args.limit).await?;
+    let image_refs = bot.fetch_liked_image_refs(&args.username, args.sample).await?;
 
     let client = reqwest::Client::new();
     for image_ref in image_refs.into_iter() {
