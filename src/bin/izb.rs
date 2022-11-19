@@ -16,6 +16,10 @@ struct Args {
     /// Only do a sample of work.
     #[arg(long, default_value = "false")]
     sample: bool,
+
+    /// Only do a sample of work.
+    #[arg(long, default_value = "49277")]
+    port: u16,
 }
 
 #[tokio::main]
@@ -28,11 +32,11 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     log::info!("Logging into Twitter with OAuth");
-    let oauth2_client = auth::load_client();
+    let oauth2_client = auth::load_client(args.port);
     let (url, state, verifier) = auth::login_start(&oauth2_client).await?;
     open::that(url.to_string())?;
     log::debug!("Waiting for callback...");
-    let params = ikkizous_bot::oauth2_callback::catch_callback().await;
+    let params = ikkizous_bot::oauth2_callback::catch_callback(args.port).await;
     assert_eq!(state.secret(), params.state.secret());
     let access_token = auth::login_end(&oauth2_client, params.code, verifier).await?;
 
