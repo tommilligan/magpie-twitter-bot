@@ -1,22 +1,16 @@
-use axum::{extract::RawQuery, response::Html, routing::get, Router};
-use std::borrow::Cow;
-use oauth2::{
-    basic::BasicErrorResponse, AuthorizationCode, CsrfToken
+use axum::{
+    extract::{Extension, RawQuery},
+    response::Html,
+    routing::get,
+    Router,
 };
+use oauth2::{basic::BasicErrorResponse, AuthorizationCode, CsrfToken};
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::net::SocketAddr;
-use std::sync::Mutex;
+use std::sync::Arc;
 use tokio::sync::oneshot::{channel, Sender};
-
-struct State {
-    pub shutdown: Option<Sender<()>>,
-    pub params: Option<CodeGrantResult>,
-}
-
-static STATE: Mutex<State> = Mutex::new(State {
-    shutdown: None,
-    params: None,
-});
+use tokio::sync::Mutex;
 
 struct Headings<'a> {
     title: &'a str,
@@ -24,8 +18,11 @@ struct Headings<'a> {
 }
 
 impl Headings<'static> {
-    pub fn new(title: &'static str, subheader: &'static str) -> Headings<'static> {
-        Headings {title, subheader: Cow::Borrowed(subheader)}
+    pub const fn new(title: &'static str, subheader: &'static str) -> Headings<'static> {
+        Headings {
+            title,
+            subheader: Cow::Borrowed(subheader),
+        }
     }
 }
 
@@ -40,8 +37,8 @@ pub struct CodeGrantResponse {
 }
 
 impl ToHeadings for CodeGrantResponse {
-    fn to_headings(&self) -> Headings{
-        Headings{
+    fn to_headings(&self) -> Headings {
+        Headings {
             title: "You are now logged in.",
             subheader: Cow::Borrowed("Please close the window."),
         }
@@ -49,7 +46,7 @@ impl ToHeadings for CodeGrantResponse {
 }
 
 impl ToHeadings for BasicErrorResponse {
-    fn to_headings(&self) -> Headings{
+    fn to_headings(&self) -> Headings {
         let error = self.error().as_ref();
         let subheader = match (self.error_description(), self.error_uri()) {
             (None, None) => Cow::Borrowed(error),
@@ -57,7 +54,7 @@ impl ToHeadings for BasicErrorResponse {
             (None, Some(uri)) => Cow::Owned(format!("{error} ({uri})")),
             (Some(description), Some(uri)) => Cow::Owned(format!("{error}: {description} ({uri})")),
         };
-        Headings{
+        Headings {
             title: "Login failed.",
             subheader,
         }
@@ -85,8 +82,12 @@ impl Into<CodeGrantResult> for CodeGrantResultCustom {
     }
 }
 
-impl<T, E> ToHeadings for Result<T, E> where T: ToHeadings, E: ToHeadings {
-    fn to_headings(&self) -> Headings{
+impl<T, E> ToHeadings for Result<T, E>
+where
+    T: ToHeadings,
+    E: ToHeadings,
+{
+    fn to_headings(&self) -> Headings {
         match self {
             Ok(response) => response.to_headings(),
             Err(response) => response.to_headings(),
@@ -94,23 +95,27 @@ impl<T, E> ToHeadings for Result<T, E> where T: ToHeadings, E: ToHeadings {
     }
 }
 
+struct State {
+    pub shutdown: Option<Sender<()>>,
+    pub code_grant_result: Option<CodeGrantResult>,
+}
+
+type SharedState = Arc<Mutex<State>>;
 
 // TODO pull this out to a generic catcher for any serde struct
 pub async fn catch_callback(port: u16) -> CodeGrantResult {
     log::debug!("Setting initial state");
     let (tx, rx) = channel::<()>();
-    {
-        let mut state = STATE.lock().expect("could not lock mutex");
-        *state = State {
-            shutdown: Some(tx),
-            params: None,
-        };
-    }
+    let state = Arc::new(Mutex::new(State {
+        shutdown: Some(tx),
+        code_grant_result: None,
+    }));
 
     let app = Router::new()
         .route("/", get(root))
         .route("/health", get(health))
-        .route("/oauth2/callback", get(oauth2_callback));
+        .route("/oauth2/callback", get(oauth2_callback))
+        .layer(Extension(state.clone()));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     log::debug!("Listening for OAuth2 callback on {}", addr);
@@ -122,8 +127,12 @@ pub async fn catch_callback(port: u16) -> CodeGrantResult {
         .await
         .unwrap();
 
-    let mut state = STATE.lock().expect("could not lock mutex");
-    state.params.take().expect("params set").into()
+    let mut state = state.lock().await;
+    state
+        .code_grant_result
+        .take()
+        .expect("code_grant_result set")
+        .into()
 }
 
 async fn root() -> &'static str {
@@ -134,25 +143,27 @@ async fn health() -> &'static str {
     "ok"
 }
 
-fn login_failed_headings() -> Headings<'static> {
-    Headings::new("Login failed.", "Received invalid OAuth2 response.")
-}
+const INVALID_RESPONSE_HEADINGS: Headings<'static> = Headings::new("Login failed.", "Received invalid OAuth2 response.");
 
-async fn oauth2_callback(RawQuery(query): RawQuery) -> Html<String> {
-    let params = if let Some(query) = query {
-        let params: CodeGrantResultCustom = serde_urlencoded::from_str(&query).unwrap();
-        let params: CodeGrantResult = params.into();
-        Some(params)
+async fn oauth2_callback(
+    Extension(state): Extension<SharedState>,
+    RawQuery(query): RawQuery,
+) -> Html<String> {
+    let code_grant_result = if let Some(query) = query {
+        let code_grant_result: CodeGrantResultCustom = serde_urlencoded::from_str(&query).unwrap();
+        let code_grant_result: CodeGrantResult = code_grant_result.into();
+        Some(code_grant_result)
     } else {
         None
     };
-    let headings = if let Some(ref params) = params {
-        params.to_headings()
+    let headings = if let Some(ref code_grant_result) = code_grant_result {
+        code_grant_result.to_headings()
     } else {
-        login_failed_headings()
+        INVALID_RESPONSE_HEADINGS
     };
 
-    let html = format!(r#"<html>
+    let html = format!(
+        r#"<html>
     <body>
         <div style="
             width: 100%;
@@ -165,9 +176,11 @@ async fn oauth2_callback(RawQuery(query): RawQuery) -> Html<String> {
             <h2>{}</h2>
         </div>
     </body>
-</html>"#, headings.title, headings.subheader);
-    let mut state = STATE.lock().expect("could not lock mutex");
-    state.params = params;
+</html>"#,
+        headings.title, headings.subheader
+    );
+    let mut state = state.lock().await;
+    state.code_grant_result = code_grant_result;
     log::debug!("shutting down");
     if let Some(shutdown) = state.shutdown.take() {
         shutdown.send(()).expect("failed to send shutdown");

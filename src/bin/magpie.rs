@@ -34,7 +34,9 @@ async fn main() -> Result<()> {
     let (url, state, verifier) = auth::login_start(&oauth2_client).await?;
     open::that(url.to_string())?;
     log::debug!("Waiting for callback...");
-    let params = oauth2_callback::catch_callback(args.port).await.map_err(|error| anyhow!("OAuth2 callback received an error response: {}", error))?;
+    let params = oauth2_callback::catch_callback(args.port)
+        .await
+        .map_err(|error| anyhow!("OAuth2 callback received an error response: {}", error))?;
     assert_eq!(state.secret(), params.state.secret());
     let access_token = auth::login_end(&oauth2_client, params.code, verifier).await?;
 
