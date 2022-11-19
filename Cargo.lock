@@ -1511,8 +1511,7 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 [[package]]
 name = "twitter-v2"
 version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a7610e778b6f3a156fa8c766a70b243dc06d253901a6e4d5b4c9b81d1486d64"
+source = "git+https://github.com/tommilligan/twitter-v2-rs?branch=new-public-oauth-client#d38df421b292fcfdfaa9c9c14074177bc786d0e2"
 dependencies = [
  "async-trait",
  "futures",

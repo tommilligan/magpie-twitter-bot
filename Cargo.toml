@@ -16,7 +16,7 @@ serde = "1.0.147"
 thiserror = "1.0.37"
 time = { version = "0.3.17", features = ["formatting"] }
 tokio = { version = "1.22.0", features = ["macros"] }
-twitter-v2 = { version = "0.1.8", default_features = false, features = ["oauth2", "rustls-tls"] }
+twitter-v2 = { git = "https://github.com/tommilligan/twitter-v2-rs", branch = "new-public-oauth-client", default_features = false, features = ["oauth2", "rustls-tls"] }
 url = "2.3.1"
 
 [dev-dependencies]
