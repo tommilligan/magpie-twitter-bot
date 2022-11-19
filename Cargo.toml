@@ -1,5 +1,5 @@
 [package]
-name = "ikkizous-bot"
+name = "magpie-twitter-bot"
 version = "0.1.0"
 edition = "2021"
 

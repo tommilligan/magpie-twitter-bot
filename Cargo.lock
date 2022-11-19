@@ -672,31 +672,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ikkizous-bot"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "clap",
- "dotenv",
- "env_logger",
- "futures",
- "indicatif",
- "log",
- "oauth2",
- "once_cell",
- "open",
- "pretty_assertions",
- "reqwest",
- "serde",
- "thiserror",
- "time",
- "tokio",
- "twitter-v2",
- "url",
-]
-
-[[package]]
 name = "indexmap"
 version = "1.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -767,6 +742,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "magpie-twitter-bot"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "clap",
+ "dotenv",
+ "env_logger",
+ "futures",
+ "indicatif",
+ "log",
+ "oauth2",
+ "once_cell",
+ "open",
+ "pretty_assertions",
+ "reqwest",
+ "serde",
+ "thiserror",
+ "time",
+ "tokio",
+ "twitter-v2",
+ "url",
 ]
 
 [[package]]

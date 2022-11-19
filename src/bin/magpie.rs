@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
-use ikkizous_bot::auth;
-use ikkizous_bot::bot::Bot;
+use magpie_twitter_bot::auth;
+use magpie_twitter_bot::bot::Bot;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
     let (url, state, verifier) = auth::login_start(&oauth2_client).await?;
     open::that(url.to_string())?;
     log::debug!("Waiting for callback...");
-    let params = ikkizous_bot::oauth2_callback::catch_callback(args.port).await;
+    let params = magpie_twitter_bot::oauth2_callback::catch_callback(args.port).await;
     assert_eq!(state.secret(), params.state.secret());
     let access_token = auth::login_end(&oauth2_client, params.code, verifier).await?;
 
