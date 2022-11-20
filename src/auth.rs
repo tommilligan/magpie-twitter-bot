@@ -8,11 +8,11 @@ pub fn load_client(port: u16) -> Oauth2Client {
         std::env::var("TWITTER_OAUTH_CLIENT_SECRET").expect("could not find CLIENT_SECRET"),
         format!("http://localhost:{port}/oauth2/callback")
             .parse()
-            .expect("callback url"),
+            .expect("callback url invalid"),
     )
 }
 
-pub async fn login_start(client: &Oauth2Client) -> Result<(url::Url, CsrfToken, PkceCodeVerifier)> {
+pub fn login_start(client: &Oauth2Client) -> (url::Url, CsrfToken, PkceCodeVerifier) {
     // Create an OAuth2 client by specifying the client ID, client secret, authorization URL and
     // token URL.
 
@@ -23,7 +23,7 @@ pub async fn login_start(client: &Oauth2Client) -> Result<(url::Url, CsrfToken, 
         [Scope::TweetRead, Scope::UsersRead, Scope::LikeRead],
     );
     // redirect user
-    Ok((url, state, verifier))
+    (url, state, verifier)
 }
 
 pub async fn login_end(

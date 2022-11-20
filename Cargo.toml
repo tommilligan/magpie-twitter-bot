@@ -10,7 +10,7 @@ env_logger = "0.9.3"
 indicatif = "0.17.2"
 log = "0.4.17"
 once_cell = "1.16.0"
-oneshot-oauth2-callback = "0.1.0"
+oneshot-oauth2-callback = { version = "0.1.0", path = "../oneshot-oauth2-callback" }
 open = "3.0.3"
 reqwest = { version = "0.11.13", default_features = false, features = ["rustls-tls"] }
 thiserror = "1.0.37"

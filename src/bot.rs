@@ -39,7 +39,7 @@ impl ImageRef {
             "{} {} {} {}",
             created_at,
             self.tweet.username,
-            self.tweet.id.to_string(),
+            self.tweet.id,
             self.internal_filename
         )
     }
@@ -91,7 +91,7 @@ impl Bot {
 
             log::debug!("Fetching page {page_count}");
             next_page = page.next_page().await?;
-            page_count = page_count + 1;
+            page_count += 1;
         }
 
         Ok(image_refs)
@@ -139,7 +139,7 @@ impl Bot {
                         .username;
                     self.username_cache.insert(author_id, username);
                     // Just inserted value above
-                    &self.username_cache.get(&author_id).unwrap()
+                    self.username_cache.get(&author_id).unwrap()
                 }
             };
 
