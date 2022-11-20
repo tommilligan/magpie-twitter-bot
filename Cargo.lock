@@ -75,8 +75,6 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "serde",
- "serde_json",
- "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tower",
@@ -743,19 +741,15 @@ name = "magpie-twitter-bot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "axum",
  "clap",
  "env_logger",
- "futures",
  "indicatif",
  "log",
- "oauth2",
  "once_cell",
+ "oneshot-oauth2-callback",
  "open",
  "pretty_assertions",
  "reqwest",
- "serde",
- "serde_urlencoded",
  "thiserror",
  "time",
  "tokio",
@@ -889,6 +883,21 @@ name = "once_cell"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86f0b0d4bf799edbc74508c1e8bf170ff5f41238e5f8225603ca7caaae2b7860"
+
+[[package]]
+name = "oneshot-oauth2-callback"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33859105a274ad0d08f16bd0348093830bd6867e4bdf273213df0b8237fac6fa"
+dependencies = [
+ "axum",
+ "hyper",
+ "oauth2",
+ "serde",
+ "serde_urlencoded",
+ "thiserror",
+ "tokio",
+]
 
 [[package]]
 name = "opaque-debug"
