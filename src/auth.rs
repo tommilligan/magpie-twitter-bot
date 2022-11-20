@@ -1,14 +1,28 @@
 use twitter_v2::authorization::{Oauth2Client, Oauth2Token, Scope};
 use twitter_v2::oauth2::{AuthorizationCode, CsrfToken, PkceCodeChallenge, PkceCodeVerifier};
-use twitter_v2::Result;
+use thiserror::Error;
 
-pub fn load_client(port: u16) -> Oauth2Client {
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Missing required environment variable '{}'", key)]
+    MissingEnvironment { key: &'static str },
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+fn require_environment(key: &'static str) -> Result<String> {
+    std::env::var(key).map_err(|_| Error::MissingEnvironment { key } )
+}
+
+pub fn load_client(port: u16) -> Result<Oauth2Client> {
+    Ok(
     Oauth2Client::new(
-        std::env::var("TWITTER_OAUTH_CLIENT_ID").expect("could not find CLIENT_ID"),
-        std::env::var("TWITTER_OAUTH_CLIENT_SECRET").expect("could not find CLIENT_SECRET"),
+        require_environment("TWITTER_OAUTH_CLIENT_ID")?,
+        require_environment("TWITTER_OAUTH_CLIENT_SECRET")?,
         format!("http://localhost:{port}/oauth2/callback")
             .parse()
             .expect("callback url invalid"),
+    )
     )
 }
 
@@ -30,7 +44,7 @@ pub async fn login_end(
     client: &Oauth2Client,
     code: AuthorizationCode,
     verifier: PkceCodeVerifier,
-) -> Result<Oauth2Token> {
+) -> twitter_v2::Result<Oauth2Token> {
     // request oauth2 token
     let token = client.request_token(code, verifier).await?;
     Ok(token)

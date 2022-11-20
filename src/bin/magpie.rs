@@ -41,7 +41,7 @@ fn arrow_spinner(message: &'static str) -> indicatif::ProgressBar {
 
 async fn run(args: &Args) -> Result<()> {
     log::info!("Logging into Twitter with OAuth");
-    let oauth2_client = auth::load_client(args.port);
+    let oauth2_client = auth::load_client(args.port).context("Loading OAuth2 configuration")?;
     let (url, state, verifier) = auth::login_start(&oauth2_client);
 
     open::that(url.to_string()).context("Failed to start login flow")?;
