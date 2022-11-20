@@ -6,8 +6,30 @@ use twitter_v2::data::{MediaType, Tweet};
 use twitter_v2::id::NumericId;
 use twitter_v2::meta::{PaginationMeta, ResultCountMeta};
 use twitter_v2::query::{MediaField, TweetExpansion, TweetField, UserField};
-use twitter_v2::Result;
 use twitter_v2::TwitterApi;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Twitter API violated an expected invariant: {}", 0)]
+    TwitterApiInvariant(&'static str),
+    #[error("Twitter client error")]
+    TwitterClient(#[from] twitter_v2::Error)
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// Helper to unwrap lots of optional fields from the twitter api, which are
+/// guaranteed to be filled in response to certain requests.
+trait TwitterInvariantExt<T> {
+    fn ok_or_invariant(self, description: &'static str) -> Result<T>;
+}
+
+impl<T> TwitterInvariantExt<T> for Option<T> {
+    fn ok_or_invariant(self, description: &'static str) -> Result<T> {
+        self.ok_or(Error::TwitterApiInvariant(description))
+    }
+}
 
 pub struct Bot {
     api: TwitterApi<Oauth2Token>,
@@ -61,7 +83,7 @@ impl Bot {
             .send()
             .await?
             .into_data()
-            .expect("username to exist");
+            .ok_or_invariant("logged in user to exist")?;
         log::debug!("Fetching page 1");
         let mut next_page = Some(
             self.api
@@ -111,19 +133,20 @@ impl Bot {
         };
         let includes = page
             .includes()
-            .expect("response contains includes")
+            .ok_or_invariant("includes in response")?
             .to_owned();
 
         let includes_media: HashMap<_, _> = includes
             .media
-            .expect("includes media")
+            .ok_or_invariant("media in includes")?
             .into_iter()
             .map(|media| (media.media_key.clone(), media))
             .collect();
         let mut image_refs = Vec::new();
 
         for tweet in liked_tweets.into_iter() {
-            let author_id = tweet.author_id.expect("author id included in response");
+            let author_id = tweet.author_id
+            .ok_or_invariant("author id in tweet")? ;
             let username = self.username_cache.get(&author_id);
             let username = match username {
                 Some(username) => username,
@@ -135,34 +158,33 @@ impl Bot {
                         .send()
                         .await?
                         .into_data()
-                        .expect("user response")
+                        .ok_or_invariant("username in response")?
                         .username;
                     self.username_cache.insert(author_id, username);
-                    // Just inserted value above
-                    self.username_cache.get(&author_id).unwrap()
+                    self.username_cache.get(&author_id).expect("just inserted author in cache")
                 }
             };
 
             let tweet_ref = TweetRef {
                 username: username.to_owned(),
-                created_at: tweet.created_at.expect("created at included in response"),
+                created_at: tweet.created_at.ok_or_invariant("created_at in tweet")?,
                 id: tweet.id,
             };
 
             if let Some(attachments) = tweet.attachments {
                 for media_key in attachments
                     .media_keys
-                    .expect("attachment media keys")
+                    .ok_or_invariant("media_keys in attachments")?
                     .into_iter()
                 {
                     if let Some(media) = includes_media.get(&media_key) {
                         if media.kind == MediaType::Photo {
-                            let url = media.url.as_ref().expect("media url");
+                            let url = media.url.as_ref().ok_or_invariant("url in media")?;
                             let filename = url
                                 .path_segments()
-                                .expect("media path segments")
+                                .ok_or_invariant("media url has valid path segments")?
                                 .last()
-                                .expect("no path segments");
+                                .ok_or_invariant("media url has no path segments")?;
                             image_refs.push(ImageRef {
                                 tweet: tweet_ref.clone(),
                                 internal_filename: filename.to_owned(),
