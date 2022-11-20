@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::sync::Arc;
 use clap::Parser;
 use magpie_twitter_bot::{auth, bot::Bot, download};
 use std::path::PathBuf;
@@ -17,6 +18,10 @@ struct Args {
     /// Only do a sample of work.
     #[arg(long, default_value = "49277")]
     port: u16,
+
+    /// Number of images to download in parallel.
+    #[arg(long, default_value = "8")]
+    download_n: usize,
 }
 
 fn arrow_spinner(message: &'static str) -> indicatif::ProgressBar {
@@ -72,16 +77,27 @@ async fn run(args: &Args) -> Result<()> {
         )
     })?;
     let client = reqwest::Client::new();
-    let progress = indicatif::ProgressBar::new(image_refs.len().try_into().expect("usize in u64"));
-    for image_ref in image_refs.into_iter() {
-        let mut path = args.out_dir.clone();
-        path.push(image_ref.filename());
-        download::file(&client, image_ref.url.clone(), &path)
-            .await
-            .with_context(|| {
-                format!("Failed writing '{}' to '{}'", image_ref.url, path.display())
-            })?;
-        progress.inc(1);
+    let progress = Arc::new(indicatif::ProgressBar::new(image_refs.len().try_into().expect("usize in u64")));
+    {
+        // How tf are streams of errors meant to work?
+        use futures::{stream, StreamExt};
+
+        let results: Vec<Result<()>> = stream::iter(image_refs).map(|image_ref| {
+            let progress = progress.clone();
+            let client = &client;
+            async move {
+                let mut path = args.out_dir.clone();
+                path.push(image_ref.filename());
+                download::file(&client, image_ref.url.clone(), &path)
+                    .await
+                    .with_context(|| {
+                        format!("Failed writing '{}' to '{}'", image_ref.url, path.display())
+                    })?;
+                progress.inc(1);
+                Ok::<(), anyhow::Error>(())
+            }
+        }).buffer_unordered(args.download_n).collect().await;
+        results.into_iter().collect::<Result<_>>()?;
     }
     Ok(())
 }
