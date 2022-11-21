@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./img/magpie-twitter-bot-icon.png">
+  <img src="./img/magpie-twitter-bot-icon.png" width="128px" height="128px">
   
   <h3 align="center">magpie-twitter-bot</h3>
 
