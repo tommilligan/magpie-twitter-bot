@@ -31,6 +31,14 @@ TWITTER_OAUTH_CLIENT_ID=ABCDEF...
 TWITTER_OAUTH_CLIENT_SECRET=GHIJKL...
 ```
 
+You will need to enable user authentication settings as follows:
+
+- App permissions: read
+- Type of App: Confidential Client
+- App info
+  - Callback URI: `http://localhost:49277/oauth2/callback`
+  - Website URL: `<your website url>`
+
 ## Run
 
 Run the bot, giving it an output directory to store files in:
