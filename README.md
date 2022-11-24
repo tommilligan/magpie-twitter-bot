@@ -8,6 +8,13 @@
   </p>
 </p>
 
+## About
+
+Twitter offers a "Download my data" type facility, but it only downloads the bare bones of data
+related to **you** - which accounts you follow, which tweets you liked, but without any of their associated data.
+
+This bot crawls through your liked tweets, finding image attachments and downloading them for safekeeping.
+
 ## Installation
 
 Clone and install from this repository:
