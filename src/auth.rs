@@ -1,6 +1,6 @@
+use thiserror::Error;
 use twitter_v2::authorization::{Oauth2Client, Oauth2Token, Scope};
 use twitter_v2::oauth2::{AuthorizationCode, CsrfToken, PkceCodeChallenge, PkceCodeVerifier};
-use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -11,19 +11,17 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 fn require_environment(key: &'static str) -> Result<String> {
-    std::env::var(key).map_err(|_| Error::MissingEnvironment { key } )
+    std::env::var(key).map_err(|_| Error::MissingEnvironment { key })
 }
 
 pub fn load_client(port: u16) -> Result<Oauth2Client> {
-    Ok(
-    Oauth2Client::new(
+    Ok(Oauth2Client::new(
         require_environment("TWITTER_OAUTH_CLIENT_ID")?,
         require_environment("TWITTER_OAUTH_CLIENT_SECRET")?,
         format!("http://localhost:{port}/oauth2/callback")
             .parse()
             .expect("callback url invalid"),
-    )
-    )
+    ))
 }
 
 pub fn login_start(client: &Oauth2Client) -> (url::Url, CsrfToken, PkceCodeVerifier) {

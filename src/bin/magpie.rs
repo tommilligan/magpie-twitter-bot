@@ -1,8 +1,15 @@
 use anyhow::{Context, Result};
-use std::sync::Arc;
 use clap::Parser;
-use magpie_twitter_bot::{auth, bot::Bot, download};
+use futures::{stream, StreamExt, TryStreamExt};
+use magpie_twitter_bot::{
+    auth,
+    bot::{Bot, ImageRef, Page},
+    download,
+};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -60,13 +67,51 @@ async fn run(args: &Args) -> Result<()> {
         .await
         .context("Failed to fetch access token")?;
 
-    let mut bot = Bot::new(access_token);
-    log::info!("Fetching image metadata");
-    let progress = arrow_spinner("Fetching...");
-    let image_refs = bot
-        .fetch_liked_image_refs(args.sample)
-        .await
-        .context("Failed to fetch image metadata")?;
+    let bot = std::sync::Arc::new(Bot::new(access_token));
+
+    log::info!("Fetching liked tweet data");
+    let progress = Arc::new(Mutex::new(arrow_spinner("Fetching tweets...")));
+    let metadata_page_count: Arc<AtomicUsize> = Default::default();
+    let image_ref_pages: Vec<Page> = bot
+        .fetch_liked_tweets()
+        .filter_map(|page| {
+            let metadata_page_count = metadata_page_count.clone();
+            let progress = progress.clone();
+            async move {
+                metadata_page_count.fetch_add(1, Ordering::SeqCst);
+                progress.lock().await.set_message(format!(
+                    "Fetching tweets... finished page {}",
+                    metadata_page_count.load(Ordering::SeqCst),
+                ));
+                Some(page)
+            }
+        })
+        .try_collect()
+        .await?;
+    progress.lock().await.finish_and_clear();
+
+    log::info!("Enriching {} pages with other data", image_ref_pages.len());
+    let progress = arrow_spinner("Processing tweets...");
+    let mut join_set = tokio::task::JoinSet::new();
+    for page in image_ref_pages.into_iter() {
+        let bot = bot.clone();
+        join_set.spawn(async move {
+            let page = bot.process_page(&page).await;
+            page
+        });
+    }
+
+    let mut image_refs: Vec<ImageRef> = Vec::new();
+    while let Some(result) = join_set.join_next().await {
+        let page = result
+            .context("failed to join future")?
+            .context("Failed to fetch image metadata")?;
+        image_refs.extend(page);
+        progress.set_message(format!(
+            "Processing tweets... found {} images",
+            image_refs.len()
+        ));
+    }
     progress.finish_and_clear();
 
     log::info!("Downloading {} images", image_refs.len());
@@ -77,26 +122,29 @@ async fn run(args: &Args) -> Result<()> {
         )
     })?;
     let client = reqwest::Client::new();
-    let progress = Arc::new(indicatif::ProgressBar::new(image_refs.len().try_into().expect("usize in u64")));
+    let progress = Arc::new(indicatif::ProgressBar::new(
+        image_refs.len().try_into().expect("usize in u64"),
+    ));
     {
-        // How tf are streams of errors meant to work?
-        use futures::{stream, StreamExt};
-
-        let results: Vec<Result<()>> = stream::iter(image_refs).map(|image_ref| {
-            let progress = progress.clone();
-            let client = &client;
-            async move {
-                let mut path = args.out_dir.clone();
-                path.push(image_ref.filename());
-                download::file(&client, image_ref.url.clone(), &path)
-                    .await
-                    .with_context(|| {
-                        format!("Failed writing '{}' to '{}'", image_ref.url, path.display())
-                    })?;
-                progress.inc(1);
-                Ok::<(), anyhow::Error>(())
-            }
-        }).buffer_unordered(args.download_n).collect().await;
+        let results: Vec<Result<()>> = stream::iter(image_refs)
+            .map(|image_ref| {
+                let progress = progress.clone();
+                let client = &client;
+                async move {
+                    let mut path = args.out_dir.clone();
+                    path.push(image_ref.filename());
+                    download::file(&client, image_ref.url.clone(), &path)
+                        .await
+                        .with_context(|| {
+                            format!("Failed writing '{}' to '{}'", image_ref.url, path.display())
+                        })?;
+                    progress.inc(1);
+                    Ok::<(), anyhow::Error>(())
+                }
+            })
+            .buffer_unordered(args.download_n)
+            .collect()
+            .await;
         results.into_iter().collect::<Result<_>>()?;
     }
     Ok(())
